@@ -666,24 +666,25 @@ def run_check():
     log.info(f"Unchecked & not-disliked total: {len(emailable)} "
              f"({len(new_ids)} new, {len(emailable)-len(new_ids)} recurring)")
 
-    if new_ids and emailable:
+    # Modified to ALWAYS send an email if there is ANYTHING unchecked, 
+    # even if there are 0 brand-new listings this run.
+    if emailable:
         n  = len(emailable)
         zc = len({l["_zone"] for l in emailable})
         sc = len({l["_source"] for l in emailable})
-        subject = (f"[Housing] {len(new_ids)} new + {n-len(new_ids)} pending · "
+        subject = (f"[Housing Test] {len(new_ids)} new + {n-len(new_ids)} pending · "
                    f"{sc} source{'s' if sc!=1 else ''} · {zc} zone{'s' if zc!=1 else ''}")
         html = format_html_email(emailable)
         try:
             send_email(subject, html)
+            log.info("Success! The email was sent to your inbox.")
         except Exception as e:
             log.error(f"Email failed: {e}")
             fb = os.path.expanduser("~/daft/alert_preview.html")
             with open(fb,"w") as f: f.write(html)
             log.info(f"Saved preview: {fb}")
-    elif not new_ids:
-        log.info("No brand-new listings — skipping email (dashboard still current).")
     else:
-        log.info("Nothing unchecked to email.")
+        log.info("Nothing unchecked to email. You are all caught up!")
     conn.close()
     log.info(f"Dashboard: http://localhost:{DASHBOARD_PORT}")
     log.info("Done.\n")
