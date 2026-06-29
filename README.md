@@ -348,12 +348,12 @@ An email is only sent when at least one brand-new listing is found. It is design
 ```
 ┌──────────────────────────────────────────────────────┐
 │ 🏠  218 new rooms — Dublin                           │
-│ Suitable for: male · ≤€1250/mo · Daft: 218 · 21:06  │
+│ Suitable for: male · ≤€1250/mo · Daft: 218 · 21:06   │
 ├──────────────────────────────────────────────────────┤
 │  [ Open the dashboard to rate, filter & see all → ]  │ ← big button
 │  Gmail blocks direct clicks — right-click → New Tab  │ ← caption
 ├──────────────────────────────────────────────────────┤
-│ NEW LISTINGS BY ZONE                                  │
+│ NEW LISTINGS BY ZONE                                 │
 │  🟢 Zone A  < 3 km                           32      │
 │  🔵 Zone B  2–5 km                           45      │
 │  🟡 Zone C  4–8.5 km                         57      │
@@ -451,9 +451,9 @@ Coloured chips below the pills let you narrow to a single zone. Zone and status 
 ┌──────────────────────────────────────────────────────────┐
 │ [□]  Clonskeagh Road — bright double room        [Daft]  │
 │      [● NEW TODAY]                                       │
-│      €900/mo  📍 Clonskeagh · 0.7 km  📅 28 Jun 2026   │
+│      €900/mo  📍 Clonskeagh · 0.7 km  📅 28 Jun 2026    │
 │      🚌 ✅ 39A walk 3min → Stop → 18min → UCD (≈21min)  │
-│      [👍][😐][👎]  [View listing →] [📍 Map] [📝 Note]  │
+│      [👍][😐][👎]  [View listing →] [📍 Map] [📝 Note] │
 └──────────────────────────────────────────────────────────┘
 ```
 
