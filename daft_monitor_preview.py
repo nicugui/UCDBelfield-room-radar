@@ -793,6 +793,21 @@ def render_dashboard(rows, focus=""):
 <script>
   function toast(m){{const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');
     clearTimeout(window._tt);window._tt=setTimeout(()=>t.classList.remove('show'),1400);}}
+  
+  // Real-time counter updater
+  function updateCounts() {{
+    let uc = 0, lk = 0;
+    document.querySelectorAll('.card').forEach(c => {{
+      if(c.dataset.checked !== '1' && c.dataset.rating !== 'dislike') uc++;
+      if(c.dataset.rating === 'like') lk++;
+    }});
+    const btns = document.querySelectorAll('.ft b');
+    if(btns.length >= 3) {{
+      btns[0].textContent = uc;
+      btns[2].textContent = lk;
+    }}
+  }}
+
   async function rate(id, r){{
     const card=document.getElementById(id);
     const cur=card.dataset.rating;
@@ -804,7 +819,9 @@ def render_dashboard(rows, focus=""):
     if(val) card.querySelector('.rb.'+({{like:'like',neutral:'neu',dislike:'dis'}}[val])).classList.add('on');
     toast(val?('Saved: '+val):'Rating cleared');
     if(val==='dislike') applyFilter();              // disliked drops out of unchecked view
+    updateCounts();
   }}
+
   async function toggleCheck(id){{
     const card=document.getElementById(id);
     const now=card.dataset.checked==='1'?0:1;
@@ -815,10 +832,13 @@ def render_dashboard(rows, focus=""):
     card.querySelector('.check').textContent=now?'✓':'○';
     toast(now?'Marked checked':'Unchecked');
     applyFilter();
+    updateCounts();
   }}
+
   let curFilter='unchecked';
   function filt(btn,f){{document.querySelectorAll('.ft').forEach(b=>b.classList.remove('on'));
     btn.classList.add('on');curFilter=f;applyFilter();}}
+
   function applyFilter(){{
     document.querySelectorAll('.card').forEach(c=>{{
       const ck=c.dataset.checked==='1', rt=c.dataset.rating;
@@ -834,6 +854,7 @@ def render_dashboard(rows, focus=""):
       h.style.display=any?'block':'none';
     }});
   }}
+
   applyFilter();
   // gentle auto-refresh so new daemon finds appear without manual reload
   setTimeout(()=>location.reload(), 5*60*1000);
