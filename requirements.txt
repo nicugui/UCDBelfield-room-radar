@@ -1,0 +1,5 @@
+curl_cffi
+schedule
+beautifulsoup4
+lxml
+flask
