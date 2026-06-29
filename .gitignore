@@ -1,0 +1,31 @@
+# macOS System Files
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Python Cache and Bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual Environments (if you ever use them)
+venv/
+.venv/
+env/
+ENV/
+
+# Local Databases 
+# (Prevents syncing your massive room tracking databases to GitHub)
+*.db
+*.sqlite3
+
+# Local Testing & Diagnostic Files
+alert_preview.html
+
+# Sensitive Configuration Files
+# (For when you move your credentials out of the main code file)
+config.json
+.env
