@@ -4,6 +4,15 @@ Automated room rental monitor for Dublin, Ireland. Polls multiple property listi
 
 Built around **UCD Belfield** as the reference point for distance and transit calculations, but the zone system and area list are straightforward to customise for any other location.
 
+### 🚌 GTFS Data Setup
+To enable commute and transit time calculations to UCD, you need the transit database. Because the raw data exceeds GitHub's file size limits, the required archives are hosted externally:
+
+* [Download GTFS Source Data (Google Drive)](https://drive.google.com/drive/folders/18ZYow7UEwa5Zh7YSvtzUHb4UKcBApa3H?usp=sharing)
+
+1. Download the files from the link above.
+2. Place them in your local data directory (default: `~/daft/`).
+3. Run `python3 gtfs_build_db.py` to generate your local `gtfs_transit.db` file.
+
 ---
 
 ## Table of contents
