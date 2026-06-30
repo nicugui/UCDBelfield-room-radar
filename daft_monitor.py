@@ -27,12 +27,12 @@ from curl_cffi import requests
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 
-GMAIL_FROM    = "your.email@gmail.com"       # ← your Gmail address
-GMAIL_TO      = "your.email@gmail.com"       # ← destination (can be same)
-GMAIL_APP_PW  = "xxxx xxxx xxxx xxxx"        # ← 16-char Google App Password
+GMAIL_FROM    = "YOUR_EMAIL@gmail.com"       # ← your Gmail address
+GMAIL_TO      = "YOUR_EMAIL@gmail.com"       # ← destination (can be same)
+GMAIL_APP_PW  = "XXXX XXXX XXXX XXXX"        # ← 16-char Google App Password
 
-MAX_PRICE      = 1250                   # ← target monthly max rent
-GENDER_FILTER  = "male"          # "male", "female", or "" for all listings
+MAX_PRICE      = YOUR_MAX_PRICE                   # ← target monthly max rent
+GENDER_FILTER  = "YOUR_GENDER"          # "male", "female", or "" for all listings
 POLL_INTERVAL  = 20
 DASHBOARD_PORT = 8765          # local dashboard at http://localhost:8765
 DB_PATH        = os.path.expanduser("~/daft/daft_seen.db")
@@ -435,56 +435,146 @@ def filter_by_price(listings):
 def get_transit_info(lat, lon, max_walk_m=700):
     if not lat or not lon:
         return ""
-    if not os.path.exists(TRANSIT_DB):
-        return ""
+
+    # A bus leg this short (in-vehicle minutes only, not counting the walk to
+    # the stop) isn't worth waiting for in real life — the schedule data has
+    # no notion of headway/wait time, so a "1 min bus ride" often means
+    # standing at a stop for 5-10 min for a journey you could've just walked.
+    TRIVIAL_BUS_MAX_MIN = 2
+    WALK_SPEED_MPM  = 83    # ≈5 km/h
+    CYCLE_SPEED_MPM = 250   # ≈15 km/h, typical city cycling pace
+    ROUTE_INFLATION = 1.2   # straight-line undercounts real street distance
+
     def hav_m(a,b,c,d):
         R=6_371_000; p,q=math.radians(a),math.radians(c)
         x=(math.sin(math.radians(c-a)/2)**2+math.cos(p)*math.cos(q)*math.sin(math.radians(d-b)/2)**2)
         return R*2*math.atan2(math.sqrt(x),math.sqrt(1-x))
+    def wmin(dist_m):
+        # Walking time in minutes, always shown explicitly — even a very
+        # short distance still rounds up to "1 min" rather than vanishing
+        # to "0 min", which read as if no walk was needed at all.
+        return max(1, round(dist_m / 83))
+    def opt_row(walk_m, route, dest, total_min, badge="", best=False):
+        dest = (dest or "UCD").replace(", Dublin 4", "").replace(", Co. Dublin", "")
+        return (
+            f'<div class="t-opt{" t-best" if best else ""}">'
+              f'<span class="t-leg"><span class="t-ic">🚶</span>{walk_m} min</span>'
+              f'<span class="t-arrow">›</span>'
+              f'<span class="t-route">{route}</span>'
+              f'<span class="t-arrow">›</span>'
+              f'<span class="t-leg t-dest"><span class="t-ic">🏁</span>{dest}</span>'
+              f'<span class="t-total{" t-best" if best else ""}">{badge}≈{total_min} min</span>'
+            f'</div>'
+        )
+
+    # Cycling time only needs straight-line distance to UCD and a fixed
+    # speed assumption — it doesn't depend on the GTFS database at all, so
+    # it's always computable. Shown on every listing regardless of whether
+    # transit data is available, since plenty of students would happily
+    # cycle anywhere reasonably close to campus rather than wait for a bus.
+    d_ucd_m   = hav_m(lat, lon, UCD_LAT, UCD_LON) * ROUTE_INFLATION
+    cycle_min = max(1, round(d_ucd_m / CYCLE_SPEED_MPM))
+    walk_all_min = max(1, round(d_ucd_m / WALK_SPEED_MPM))
+    cycle_row = (
+        '<div class="t-cyclerow">'
+          f'<span class="t-ic">🚲</span>Cycle to UCD <b>{cycle_min} min</b>'
+          f'<span class="t-cyclerow-sub"> · walk all the way {walk_all_min} min</span>'
+        '</div>'
+    )
+    cycle_row_standalone = cycle_row.replace('class="t-cyclerow"', 'class="t-cyclerow t-cyclerow-solo"')
+    def wrap(main_html):
+        if not main_html:
+            return f'<div class="t-block">{cycle_row_standalone}</div>'
+        return f'<div class="t-block">{main_html}{cycle_row}</div>'
+
+    if not os.path.exists(TRANSIT_DB):
+        # No GTFS data built yet — still show what we can compute (cycling
+        # and walking) rather than leaving the listing blank.
+        return wrap("")
+
     conn = sqlite3.connect(TRANSIT_DB)
-    dlat = max_walk_m/111_000
-    dlon = max_walk_m/(111_000*math.cos(math.radians(lat)))
-    raw = conn.execute("SELECT stop_id,stop_name,lat,lon FROM stops "
-        "WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?",
-        (lat-dlat,lat+dlat,lon-dlon,lon+dlon)).fetchall()
-    within = sorted([(s,n,round(hav_m(lat,lon,sl,so))) for s,n,sl,so in raw
-                     if hav_m(lat,lon,sl,so)<=max_walk_m], key=lambda x:x[2])
-    if not within:
-        conn.close(); return f"No stops within {max_walk_m}m"
-    seen_r, direct = set(), []
-    for sid,sname,dist_m in within[:10]:
-        walk = dist_m/83
-        for rn,avg,un in conn.execute("SELECT route_name,MIN(avg_min) m,ucd_stop_name "
-            "FROM transit_times WHERE stop_id=? GROUP BY route_name,ucd_stop_name ORDER BY m",(sid,)).fetchall():
-            if rn not in seen_r:
-                seen_r.add(rn)
-                us=(un or "UCD").replace(", Dublin 4","").replace(", Co. Dublin","")
-                direct.append({"r":rn,"f":sname,"w":round(walk),"b":round(avg),"t":round(walk+avg),"u":us})
-    if direct:
-        direct.sort(key=lambda x:x["t"])
-        parts=[f"✅ <b>{d['r']}</b> walk {d['w']}min → {d['f']} → {d['b']}min → {d['u']} (≈{d['t']}min)"
-               for d in direct[:2]]
-        conn.close(); return "  |  ".join(parts)
-    nearby_ids=tuple(s[0] for s in within[:12]); ph=",".join("?"*len(nearby_ids))
-    nrts=tuple(r[0] for r in conn.execute(
-        f"SELECT DISTINCT route_name FROM stop_routes WHERE stop_id IN ({ph})",nearby_ids).fetchall())
-    if not nrts:
-        conn.close(); return f"⚠️ No bus nearby ({within[0][1]}, {within[0][2]}m)"
-    ph2=",".join("?"*len(nrts))
-    tr=conn.execute(f"""SELECT sr1.route_name,s.stop_name,tt.route_name,MIN(tt.avg_min),tt.ucd_stop_name
-        FROM stop_routes sr1 JOIN stop_routes sr2 ON sr1.stop_id=sr2.stop_id
-        JOIN transit_times tt ON tt.route_name=sr2.route_name AND tt.stop_id=sr2.stop_id
-        JOIN stops s ON s.stop_id=sr1.stop_id
-        WHERE sr1.route_name IN ({ph2})
-          AND sr2.route_name IN (SELECT DISTINCT route_name FROM transit_times)
-        GROUP BY sr1.route_name,tt.route_name ORDER BY MIN(tt.avg_min) LIMIT 2""",nrts).fetchall()
-    conn.close()
-    nr=within[0]; rl=", ".join(sorted(set(nrts))[:4])
-    head=f"⚠️ Transfer — {nr[1]} ({nr[2]}m): <b>{rl}</b>"
-    if tr:
-        t=tr[0]; us=(t[4] or "UCD").replace(", Dublin 4","").replace(", Co. Dublin","")
-        return head+f"  |  → {t[0]} → {t[1]} → transfer <b>{t[2]}</b> → {us} (≈{round(t[3])}min)"
-    return head
+    try:
+        dlat = max_walk_m/111_000
+        dlon = max_walk_m/(111_000*math.cos(math.radians(lat)))
+        raw = conn.execute("SELECT stop_id,stop_name,lat,lon FROM stops "
+            "WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?",
+            (lat-dlat,lat+dlat,lon-dlon,lon+dlon)).fetchall()
+        within = sorted([(s,n,round(hav_m(lat,lon,sl,so))) for s,n,sl,so in raw
+                         if hav_m(lat,lon,sl,so)<=max_walk_m], key=lambda x:x[2])
+        if not within:
+            return wrap(f'<div class="t-muted">🚶 No bus stops within {max_walk_m}m</div>')
+        seen_r, direct = set(), []
+        for sid,sname,dist_m in within[:10]:
+            w = wmin(dist_m)
+            for rn,avg,un in conn.execute("SELECT route_name,MIN(avg_min) m,ucd_stop_name "
+                "FROM transit_times WHERE stop_id=? GROUP BY route_name,ucd_stop_name ORDER BY m",(sid,)).fetchall():
+                if rn not in seen_r:
+                    seen_r.add(rn)
+                    direct.append({"r":rn,"f":sname,"w":w,"b":round(avg),"t":w+round(avg),"u":un})
+        if direct:
+            # Drop any option whose actual bus-riding time is trivially
+            # short — those aren't real transit options, just statistical
+            # noise from a stop happening to be one hop from a UCD stop.
+            substantial = [d for d in direct if d["b"] > TRIVIAL_BUS_MAX_MIN]
+            if not substantial:
+                return wrap('<div class="t-muted">🚌 Nearest bus only saves a minute or two '
+                            '— probably not worth the wait</div>')
+            substantial.sort(key=lambda x:x["t"])
+            shown = substantial[:2]
+            best_t = shown[0]["t"]
+            rows = [
+                opt_row(d["w"], d["r"], d["u"], d["t"],
+                        badge="⚡ " if (d["t"]==best_t and len(shown)>1) else "",
+                        best=(d["t"]==best_t and len(shown)>1))
+                for d in shown
+            ]
+            return wrap("".join(rows))
+        nearby_ids=tuple(s[0] for s in within[:12]); ph=",".join("?"*len(nearby_ids))
+        nrts=tuple(r[0] for r in conn.execute(
+            f"SELECT DISTINCT route_name FROM stop_routes WHERE stop_id IN ({ph})",nearby_ids).fetchall())
+        nr=within[0]
+        if not nrts:
+            return wrap(f'<div class="t-muted">⚠️ No bus near {nr[1]} ({nr[2]}m)</div>')
+        ph2=",".join("?"*len(nrts))
+        tr=conn.execute(f"""SELECT sr1.route_name,s.stop_name,tt.route_name,MIN(tt.avg_min),tt.ucd_stop_name
+            FROM stop_routes sr1 JOIN stop_routes sr2 ON sr1.stop_id=sr2.stop_id
+            JOIN transit_times tt ON tt.route_name=sr2.route_name AND tt.stop_id=sr2.stop_id
+            JOIN stops s ON s.stop_id=sr1.stop_id
+            WHERE sr1.route_name IN ({ph2})
+              AND sr2.route_name IN (SELECT DISTINCT route_name FROM transit_times)
+            GROUP BY sr1.route_name,tt.route_name ORDER BY MIN(tt.avg_min) LIMIT 1""",nrts).fetchall()
+        w = wmin(nr[2])
+        rl = ", ".join(sorted(set(nrts))[:4])
+        if not tr:
+            return wrap(f'<div class="t-muted">⚠️ No direct route — walk {w} min to {nr[1]} '
+                        f'for {rl}, but no onward connection to UCD found</div>')
+        t = tr[0]
+        dest = (t[4] or "UCD").replace(", Dublin 4", "").replace(", Co. Dublin", "")
+        row = (
+            f'<div class="t-opt t-transfer">'
+              f'<span class="t-leg"><span class="t-ic">🚶</span>{w} min</span>'
+              f'<span class="t-arrow">›</span>'
+              f'<span class="t-route">{t[0]}</span>'
+              f'<span class="t-arrow">›</span>'
+              f'<span class="t-leg t-swap"><span class="t-ic">⇄</span>{t[1]}</span>'
+              f'<span class="t-arrow">›</span>'
+              f'<span class="t-route t-route-2">{t[2]}</span>'
+              f'<span class="t-arrow">›</span>'
+              f'<span class="t-leg t-dest"><span class="t-ic">🏁</span>{dest}</span>'
+              f'<span class="t-total">≈{round(t[3])} min<span class="t-sub"> after transfer</span></span>'
+            f'</div>'
+        )
+        return wrap(row)
+    except sqlite3.OperationalError as e:
+        # gtfs_transit.db exists but its schema doesn't match what we expect
+        # (e.g. a build script that skipped the stop_routes table). Never let
+        # a transit lookup take down the whole run — fall back to the
+        # cycling/walking estimate, which doesn't depend on this table.
+        log.warning(f"  Transit DB query failed ({e}) — gtfs_transit.db looks incomplete/outdated. "
+                    f"Re-run gtfs_build_db.py to rebuild it. Showing cycling estimate only.")
+        return wrap("")
+    finally:
+        conn.close()
 
 # ── INTERACTIVE EMAIL ────────────────────────────────────────────────────────
 
@@ -786,7 +876,7 @@ def render_dashboard(rows, focus=""):
         {"<span class='meta-item'>📅 "+l['_posted']+"</span>" if l.get('_posted') else ""}
         <span class="meta-item meta-id">#{str(l['id']).split(':')[-1]}</span>
       </div>
-      {"<div class='card-transit'>🚌 "+l['_transit_info']+"</div>" if l.get('_transit_info') else ""}
+      {"<div class='card-transit'>"+l['_transit_info']+"</div>" if l.get('_transit_info') else ""}
       <div class="card-actions">
         <div class="rate-group">
           <button class="rate-btn like{' on' if rr=='like' else ''}" onclick="rate('{l['id']}','like')" title="Interested">👍</button>
@@ -919,8 +1009,38 @@ def render_dashboard(rows, focus=""):
   .meta-price{{font-weight:800;color:var(--green);font-size:15px;letter-spacing:-.01em}}
   .meta-item{{color:var(--ink2)}}
   .meta-id{{color:var(--ink3);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px}}
-  .card-transit{{margin:8px 0 0 35px;font-size:12px;color:var(--ink2);line-height:1.5;
-                 background:#f8fafc;border-radius:7px;padding:7px 10px}}
+  /* ── Transit journey strip ── */
+  .card-transit{{margin:9px 0 0 35px}}
+  .t-block{{display:flex;flex-direction:column;gap:5px}}
+  .t-opt{{display:flex;align-items:center;flex-wrap:wrap;gap:0;background:#f8fafc;
+          border:1px solid var(--border2);border-radius:8px;padding:7px 10px;font-size:12px}}
+  .t-opt.t-best{{background:#f0fdf4;border-color:#bbf7d0}}
+  .t-opt.t-transfer{{background:#fffbeb;border-color:#fde68a}}
+  .t-leg{{display:inline-flex;align-items:center;gap:4px;color:var(--ink2);white-space:nowrap;font-weight:500}}
+  .t-ic{{font-size:12px;opacity:.85}}
+  .t-arrow{{color:var(--ink3);margin:0 7px;font-size:13px;font-weight:700}}
+  .t-route{{display:inline-flex;align-items:center;font-size:11.5px;font-weight:800;color:#fff;
+            background:var(--brand);padding:2px 9px;border-radius:5px;letter-spacing:.01em;white-space:nowrap}}
+  .t-route-2{{background:#7c3aed}}
+  .t-dest{{color:var(--ink2)}}
+  .t-swap{{color:var(--amber-ink);font-weight:700}}
+  .t-total{{margin-left:auto;font-size:11.5px;font-weight:800;color:var(--ink);background:#fff;
+            border:1px solid var(--border);padding:3px 10px;border-radius:20px;white-space:nowrap}}
+  .t-total.t-best{{color:var(--green-ink);border-color:#bbf7d0}}
+  .t-sub{{font-weight:500;color:var(--ink3);margin-left:2px}}
+  .t-muted{{font-size:12px;color:var(--ink3);background:#f8fafc;border-radius:8px;padding:7px 10px;
+            border:1px solid var(--border2)}}
+  .t-cyclerow{{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--ink2);
+              padding:6px 10px 2px;margin-top:3px;border-top:1px dashed var(--border2)}}
+  .t-cyclerow.t-cyclerow-solo{{border-top:none;padding:7px 10px;margin-top:0;
+              background:#f8fafc;border-radius:8px;border:1px solid var(--border2)}}
+  .t-cyclerow b{{color:var(--ink);font-weight:800}}
+  .t-cyclerow-sub{{color:var(--ink3);font-weight:500}}
+  .card-meta{{display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin:10px 0 0 35px;
+              font-size:12.5px;color:var(--ink2)}}
+  .meta-price{{font-weight:800;color:var(--green);font-size:15px;letter-spacing:-.01em}}
+  .meta-item{{color:var(--ink2)}}
+  .meta-id{{color:var(--ink3);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px}}
   .card-actions{{display:flex;align-items:center;gap:10px;margin:12px 0 0 35px;flex-wrap:wrap;
                  justify-content:space-between}}
   .rate-group{{display:flex;gap:5px;background:#f1f5f9;padding:3px;border-radius:9px}}
