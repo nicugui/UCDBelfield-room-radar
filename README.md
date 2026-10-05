@@ -633,7 +633,7 @@ python3 daft_monitor.py --daemon
 
 This tool makes automated HTTP requests to Daft.ie and other platforms. Automated scraping may be against their Terms of Service. It is intended for personal, non-commercial use only. Use responsibly — the built-in delays between requests exist for a reason. The author takes no responsibility for any consequences arising from the use of this tool.
 
-### Development assisted by Claude Code
+**Development assisted by Claude Code**
 
 ---
 
