@@ -116,7 +116,7 @@ Portobello · South Circular Road · Rialto · Phibsborough · Stoneybatter · D
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/your-username/dublin-room-radar.git
+git clone https://github.com/nicugui/dublin-room-radar.git
 cd dublin-room-radar
 
 # 2. Install Python dependencies
