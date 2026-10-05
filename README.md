@@ -116,8 +116,8 @@ Portobello · South Circular Road · Rialto · Phibsborough · Stoneybatter · D
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/nicugui/dublin-room-radar.git
-cd dublin-room-radar
+git clone https://github.com/nicugui/UCDBelfield-room-radar.git
+cd UCDBelfield-room-radar
 
 # 2. Install Python dependencies
 pip install curl_cffi schedule beautifulsoup4 lxml flask
